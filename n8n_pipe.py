@@ -25,18 +25,12 @@ def extract_event_info(event_emitter) -> tuple[Optional[str], Optional[str]]:
 
 class Pipe:
     class Valves(BaseModel):
-        n8n_url: str = Field(
-            default="https://n8n.[your domain].com/webhook/[your webhook URL]"
-        )
-        n8n_bearer_token: str = Field(default="...")
+        n8n_url: str = Field(default=os.getenv("WEBHOOK_URL", "https://altacoach.passbye.io/webhook/[your_webhook_URL]"))
+        n8n_bearer_token: str = Field(default=os.getenv("N8N_BASIC_AUTH_PASSWORD", "..."))
         input_field: str = Field(default="chatInput")
         response_field: str = Field(default="output")
-        emit_interval: float = Field(
-            default=2.0, description="Interval in seconds between status emissions"
-        )
-        enable_status_indicator: bool = Field(
-            default=True, description="Enable or disable status indicator emissions"
-        )
+        emit_interval: float = Field(default=2.0, description="Interval in seconds between status emissions")
+        enable_status_indicator: bool = Field(default=True, description="Enable or disable status indicator emissions")
 
     def __init__(self):
         self.type = "pipe"
@@ -44,7 +38,6 @@ class Pipe:
         self.name = "N8N Pipe"
         self.valves = self.Valves()
         self.last_emit_time = 0
-        pass
 
     async def emit_status(
         self,
@@ -82,7 +75,7 @@ class Pipe:
         __event_call__: Callable[[dict], Awaitable[dict]] = None,
     ) -> Optional[dict]:
         await self.emit_status(
-            __event_emitter__, "info", "/Calling N8N Workflow...", False
+            __event_emitter__, "info", "Calling N8N Workflow...", False
         )
         chat_id, _ = extract_event_info(__event_emitter__)
         messages = body.get("messages", [])
@@ -98,15 +91,14 @@ class Pipe:
                 }
                 payload = {"sessionId": f"{chat_id}"}
                 payload[self.valves.input_field] = question
-                response = requests.post(
-                    self.valves.n8n_url, json=payload, headers=headers
-                )
+                response = requests.post(self.valves.n8n_url, json=payload, headers=headers)
+
                 if response.status_code == 200:
-                    n8n_response = response.json()[self.valves.response_field]
+                    n8n_response = response.json().get(self.valves.response_field, "No response")
                 else:
                     raise Exception(f"Error: {response.status_code} - {response.text}")
 
-                # Set assitant message with chain reply
+                # Set assistant message with chain reply
                 body["messages"].append({"role": "assistant", "content": n8n_response})
             except Exception as e:
                 await self.emit_status(
@@ -116,7 +108,6 @@ class Pipe:
                     True,
                 )
                 return {"error": str(e)}
-        # If no message is available alert user
         else:
             await self.emit_status(
                 __event_emitter__,
@@ -124,12 +115,7 @@ class Pipe:
                 "No messages found in the request body",
                 True,
             )
-            body["messages"].append(
-                {
-                    "role": "assistant",
-                    "content": "No messages found in the request body",
-                }
-            )
+            body["messages"].append({"role": "assistant", "content": "No messages found in the request body"})
 
         await self.emit_status(__event_emitter__, "info", "Complete", True)
-        return n8n_response
+        return body
