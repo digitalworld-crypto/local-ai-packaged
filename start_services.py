@@ -23,7 +23,7 @@ def clone_supabase_repo():
     if not os.path.exists("supabase"):
         print("Cloning the Supabase repository...")
         run_command([
-            "git", "clone", "--filter=blob:none", "--no-checkout",
+            "git", "clone", "--depth=1", "--filter=blob:none", "--no-checkout",
             "https://github.com/supabase/supabase.git"
         ])
         os.chdir("supabase")
@@ -41,19 +41,25 @@ def prepare_supabase_env():
     """Copy .env to .env in supabase/docker."""
     env_path = os.path.join("supabase", "docker", ".env")
     env_example_path = os.path.join(".env")
-    print("Copying .env in root to .env in supabase/docker...")
-    shutil.copyfile(env_example_path, env_path)
+    if os.path.exists(env_example_path):
+        print("Copying .env in root to .env in supabase/docker...")
+        shutil.copyfile(env_example_path, env_path)
+    else:
+        print("⚠️ .env file not found in root directory! Skipping copy.")
 
 def stop_existing_containers():
     """Stop and remove existing containers for our unified project ('localai')."""
     print("Stopping and removing existing containers for the unified project 'localai'...")
-    run_command([
-        "docker", "compose",
-        "-p", "localai",
-        "-f", "docker-compose.yml",
-        "-f", "supabase/docker/docker-compose.yml",
-        "down"
-    ])
+    try:
+        run_command([
+            "docker", "compose",
+            "-p", "localai",
+            "-f", "docker-compose.yml",
+            "-f", "supabase/docker/docker-compose.yml",
+            "down"
+        ])
+    except subprocess.CalledProcessError:
+        print("⚠️ Warning: Unable to stop existing containers. Continuing...")
 
 def start_supabase():
     """Start the Supabase services (using its compose file)."""
@@ -74,7 +80,7 @@ def start_local_ai(profile=None):
 def main():
     parser = argparse.ArgumentParser(description='Start the local AI and Supabase services.')
     parser.add_argument('--profile', choices=['cpu', 'gpu-nvidia', 'gpu-amd', 'none'], default='cpu',
-                      help='Profile to use for Docker Compose (default: cpu)')
+                        help='Profile to use for Docker Compose (default: cpu)')
     args = parser.parse_args()
 
     clone_supabase_repo()
